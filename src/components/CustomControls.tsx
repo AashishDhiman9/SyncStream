@@ -14,7 +14,9 @@ import {
   PictureInPicture2,
   Activity,
   Share2,
-  Gauge
+  Gauge,
+  Mic,
+  MicOff
 } from "lucide-react";
 import { SyncStatus } from "../types";
 
@@ -31,6 +33,7 @@ interface CustomControlsProps {
   playbackRate: number;
   showStats: boolean;
   isSharingScreen: boolean;
+  isMicEnabled: boolean;
   onPlayPause: () => void;
   onSeek: (time: number) => void;
   onVolumeChange: (vol: number) => void;
@@ -38,6 +41,7 @@ interface CustomControlsProps {
   onSetPlaybackRate: (rate: number) => void;
   onToggleStats: () => void;
   onToggleScreenShare: () => void;
+  onToggleMic: () => void;
   onToggleFullscreen: () => void;
   onTogglePiP: () => void;
 }
@@ -55,6 +59,7 @@ export const CustomControls: React.FC<CustomControlsProps> = ({
   playbackRate,
   showStats,
   isSharingScreen,
+  isMicEnabled,
   onPlayPause,
   onSeek,
   onVolumeChange,
@@ -62,6 +67,7 @@ export const CustomControls: React.FC<CustomControlsProps> = ({
   onSetPlaybackRate,
   onToggleStats,
   onToggleScreenShare,
+  onToggleMic,
   onToggleFullscreen,
   onTogglePiP
 }) => {
@@ -146,6 +152,21 @@ export const CustomControls: React.FC<CustomControlsProps> = ({
           >
             <Share2 className="w-3.5 h-3.5" />
             <span>{isSharingScreen ? "Stop Screen Share" : "Screen Share"}</span>
+          </button>
+
+          {/* Microphone Toggle */}
+          <button
+            onClick={onToggleMic}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all pointer-events-auto border ${
+              isMicEnabled
+                ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30"
+                : "bg-white/10 text-white/80 border-white/10 hover:bg-white/20"
+            }`}
+            title={isMicEnabled ? "Turn microphone off" : "Talk with microphone"}
+            id="control-btn-mic"
+          >
+            {isMicEnabled ? <Mic className="w-3.5 h-3.5" /> : <MicOff className="w-3.5 h-3.5" />}
+            <span>{isMicEnabled ? "Mic On" : "Mic Off"}</span>
           </button>
 
           {/* Stats Overlay Toggle */}

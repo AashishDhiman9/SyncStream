@@ -7,6 +7,7 @@
 export interface WebRTCCallbacks {
   onSignal: (targetPeerId: string, signal: any, signalType: 'offer' | 'answer' | 'candidate') => void;
   onRemoteStream: (peerId: string, stream: MediaStream) => void;
+  onRemoteAudioStream?: (peerId: string, stream: MediaStream) => void;
   onPeerDisconnected: (peerId: string) => void;
   onStatsUpdate?: (bitrateKbps: number, packetLoss: number) => void;
   onScreenShareEnded?: () => void;
@@ -29,6 +30,7 @@ export class WebRTCManager {
   private callbacks: WebRTCCallbacks;
   private selfId: string;
   private statsTimer: number | null = null;
+  private renegotiatingPeers = new Set<string>();
 
   constructor(selfId: string, callbacks: WebRTCCallbacks) {
     this.selfId = selfId;
@@ -88,6 +90,49 @@ export class WebRTCManager {
     } catch (err) {
       console.error("Failed to start screen share:", err);
       throw err;
+    }
+  }
+
+  public async startMicrophone(): Promise<MediaStream> {
+    if (this.localMicStream) {
+      return this.localMicStream;
+    }
+
+    const micStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+    });
+    this.localMicStream = micStream;
+
+    if (this.localScreenStream) {
+      this.mixAudioStreams(this.localScreenStream, micStream);
+    }
+
+    this.broadcastLocalTracks();
+    return micStream;
+  }
+
+  public stopMicrophone() {
+    if (this.localMicStream) {
+      this.localMicStream.getTracks().forEach(t => t.stop());
+      this.localMicStream = null;
+    }
+
+    if (this.audioContext) {
+      this.audioContext.close().catch(() => {});
+      this.audioContext = null;
+    }
+    this.mixedAudioTrack = null;
+
+    for (const [peerId, pc] of this.peers.entries()) {
+      pc.getSenders().forEach(sender => {
+        if (sender.track?.kind === "audio") {
+          try {
+            pc.removeTrack(sender);
+          } catch (e) {}
+        }
+      });
+      this.addLocalTracksToPeer(pc);
+      this.renegotiatePeer(peerId);
     }
   }
 
@@ -182,7 +227,12 @@ export class WebRTCManager {
 
     pc.ontrack = (event) => {
       if (event.streams && event.streams[0]) {
-        this.callbacks.onRemoteStream(peerId, event.streams[0]);
+        const stream = event.streams[0];
+        if (event.track.kind === "video" || stream.getVideoTracks().length > 0) {
+          this.callbacks.onRemoteStream(peerId, stream);
+        } else if (event.track.kind === "audio" && this.callbacks.onRemoteAudioStream) {
+          this.callbacks.onRemoteAudioStream(peerId, stream);
+        }
       }
     };
 
@@ -219,12 +269,16 @@ export class WebRTCManager {
       }
     }
 
-    const audioTrack = this.mixedAudioTrack || (this.localScreenStream ? this.localScreenStream.getAudioTracks()[0] : null);
+    const audioTrack = this.mixedAudioTrack
+      || this.localMicStream?.getAudioTracks()[0]
+      || (this.localScreenStream ? this.localScreenStream.getAudioTracks()[0] : null);
     if (audioTrack) {
       const senders = pc.getSenders();
-      const hasAudioSender = senders.some(s => s.track && s.track.kind === "audio");
-      if (!hasAudioSender) {
-        pc.addTrack(audioTrack, this.localScreenStream || new MediaStream([audioTrack]));
+      const audioSender = senders.find(s => s.track && s.track.kind === "audio");
+      if (audioSender && audioSender.track !== audioTrack) {
+        audioSender.replaceTrack(audioTrack).catch(() => {});
+      } else if (!audioSender) {
+        pc.addTrack(audioTrack, this.localScreenStream || this.localMicStream || new MediaStream([audioTrack]));
       }
     }
   }
@@ -232,8 +286,27 @@ export class WebRTCManager {
   private broadcastLocalTracks() {
     for (const [peerId, pc] of this.peers.entries()) {
       this.addLocalTracksToPeer(pc);
-      // Re-negotiate
-      this.createPeerConnection(peerId, true);
+      this.renegotiatePeer(peerId);
+    }
+  }
+
+  private async renegotiatePeer(peerId: string) {
+    if (this.renegotiatingPeers.has(peerId)) return;
+    const pc = this.peers.get(peerId);
+    if (!pc || pc.signalingState !== "stable") return;
+
+    this.renegotiatingPeers.add(peerId);
+    try {
+      const offer = await pc.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: true
+      });
+      await pc.setLocalDescription(offer);
+      this.callbacks.onSignal(peerId, offer, "offer");
+    } catch (err) {
+      console.warn("WebRTC renegotiation failed:", err);
+    } finally {
+      this.renegotiatingPeers.delete(peerId);
     }
   }
 
