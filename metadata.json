@@ -1,0 +1,9 @@
+{
+  "name": "SyncStream - Synchronized Video Platform",
+  "description": "High-performance synchronized video watching platform with WebRTC screen sharing, sub-100ms drift playback engine, multi-source media support, and real-time room state synchronization.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "display-capture"
+  ]
+}
