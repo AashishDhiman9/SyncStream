@@ -38,6 +38,23 @@ https://aashishdhiman9.github.io/SyncStream/
 
 The Pages build uses static preview mode because GitHub Pages cannot run the Node.js WebSocket server.
 
+## Render Deployment
+
+Use Render for the full app with rooms, chat, WebSocket sync, and WebRTC signaling.
+
+1. Open Render and create a new Blueprint or Web Service from this GitHub repo.
+2. Select `AashishDhiman9/SyncStream`.
+3. Render can use `render.yaml` automatically.
+
+Manual settings, if needed:
+
+```text
+Runtime: Node
+Build Command: npm ci && npm run build
+Start Command: npm start
+Health Check Path: /api/health
+```
+
 ## Notes
 
 - No external AI API key or hosted studio account is required.
